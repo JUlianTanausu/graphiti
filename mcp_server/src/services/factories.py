@@ -213,10 +213,14 @@ class LLMClientFactory:
                 # Then create the LLMConfig
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
+                # Use the same model for both main and small model slots so that
+                # operations requesting ModelSize.small don't fall back to DEFAULT_SMALL_MODEL
+                # ('gpt-4.1-nano'), which is unlikely to exist as an Azure deployment.
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
                     base_url=base_url,
                     model=config.model,
+                    small_model=config.model,
                     # None is intentional for reasoning models; core LLMConfig stores it
                     # verbatim and downstream clients omit temperature when it is None.
                     temperature=config.temperature,  # type: ignore[arg-type]
