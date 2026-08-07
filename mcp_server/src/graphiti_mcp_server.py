@@ -170,6 +170,12 @@ entity types via an edge_type_map. With no such configuration, default extractio
 When adding information, provide descriptive names and detailed content to improve search quality.
 When searching, use specific queries and consider filtering by group_id, type, or date range. The
 server requires a configured database and valid API keys for language-model operations.
+
+IMPORTANT: Never invent or hard-code a group_id value. Do NOT pass a group_id parameter to
+add_memory, search_nodes, search_memory_facts, or any other tool unless the user has explicitly
+asked you to use a specific group. Always omit the group_id parameter and let the server use its
+configured default. Using an ad-hoc group_id (e.g. "test-user", "user-1") causes saves and searches
+to target different partitions, making saved data invisible to subsequent searches.
 """
 
 # MCP server instance
