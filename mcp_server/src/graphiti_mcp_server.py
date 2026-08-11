@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -54,6 +55,16 @@ from utils.type_config import (
     coerce_group_ids,
     parse_reference_time,
 )
+
+def normalize_group_id(group_id: str) -> str:
+    """Normalize a group_id: remove accents, lowercase, strip whitespace.
+
+    Ensures 'Julián', 'Julian' and 'julian' all map to the same partition.
+    """
+    nfkd = unicodedata.normalize('NFD', group_id)
+    ascii_str = ''.join(c for c in nfkd if unicodedata.category(c) != 'Mn')
+    return ascii_str.lower().strip()
+
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -466,7 +477,7 @@ async def add_memory(
 
     try:
         # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id or config.graphiti.group_id
+        effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
 
         # Try to parse the source as an EpisodeType enum, with fallback to text
         episode_type = EpisodeType.text  # Default
@@ -536,13 +547,16 @@ async def search_nodes(
 
         # Accept a scalar group_id or a list; fall back to the default when omitted.
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        effective_group_ids = [
+            normalize_group_id(g)
+            for g in (
+                group_ids
+                if group_ids is not None
+                else [config.graphiti.group_id]
+                if config.graphiti.group_id
+                else []
+            )
+        ]
 
         # Create search filters
         search_filters = SearchFilters(
@@ -637,13 +651,16 @@ async def search_memory_facts(
 
         # Accept a scalar group_id or a list; fall back to the default when omitted.
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        effective_group_ids = [
+            normalize_group_id(g)
+            for g in (
+                group_ids
+                if group_ids is not None
+                else [config.graphiti.group_id]
+                if config.graphiti.group_id
+                else []
+            )
+        ]
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -768,13 +785,16 @@ async def get_episodes(
 
         # Accept a scalar group_id or a list; fall back to the default when omitted.
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        effective_group_ids = [
+            normalize_group_id(g)
+            for g in (
+                group_ids
+                if group_ids is not None
+                else [config.graphiti.group_id]
+                if config.graphiti.group_id
+                else []
+            )
+        ]
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
@@ -841,7 +861,7 @@ async def summarize_saga(
     try:
         client = await graphiti_service.get_client()
 
-        effective_group_id = group_id or config.graphiti.group_id
+        effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
         if not effective_group_id:
             return ErrorResponse(error='No group_id provided and no default group_id is configured')
 
@@ -958,7 +978,7 @@ async def add_triplet(
     try:
         client = await graphiti_service.get_client()
 
-        effective_group_id = group_id or config.graphiti.group_id
+        effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
         if not effective_group_id:
             return ErrorResponse(error='No group_id provided and no default group_id is configured')
         now = datetime.now(timezone.utc)
@@ -1055,11 +1075,14 @@ async def clear_graph(
         # (Parenthesized so an explicit group_ids isn't dropped when the configured
         # default group_id is unset — `or` binds tighter than the ternary.)
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else ([config.graphiti.group_id] if config.graphiti.group_id else [])
-        )
+        effective_group_ids = [
+            normalize_group_id(g)
+            for g in (
+                group_ids
+                if group_ids is not None
+                else ([config.graphiti.group_id] if config.graphiti.group_id else [])
+            )
+        ]
 
         if not effective_group_ids:
             return ErrorResponse(error='No group IDs specified for clearing')
