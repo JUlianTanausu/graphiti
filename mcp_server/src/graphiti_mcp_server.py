@@ -188,6 +188,12 @@ add_memory, search_nodes, search_memory_facts, or any other tool unless the user
 asked you to use a specific group. Always omit the group_id parameter and let the server use its
 configured default. Using an ad-hoc group_id (e.g. "test-user", "user-1") causes saves and searches
 to target different partitions, making saved data invisible to subsequent searches.
+
+CRITICAL — search before you answer: Before responding to ANY question about what you know about
+the user, their history, preferences, location, or any stored fact, you MUST call BOTH
+search_memory_facts AND search_nodes. A single tool is not enough — facts and entities are indexed
+separately. Only after running both searches and finding nothing may you say you have no information.
+Never skip this step even if a previous search in the same conversation returned empty results.
 """
 
 # MCP server instance
