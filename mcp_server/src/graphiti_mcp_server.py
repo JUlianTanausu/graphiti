@@ -183,11 +183,10 @@ When adding information, provide descriptive names and detailed content to impro
 When searching, use specific queries and consider filtering by group_id, type, or date range. The
 server requires a configured database and valid API keys for language-model operations.
 
-IMPORTANT: Never invent or hard-code a group_id value. Do NOT pass a group_id parameter to
-add_memory, search_nodes, search_memory_facts, or any other tool unless the user has explicitly
-asked you to use a specific group. Always omit the group_id parameter and let the server use its
-configured default. Using an ad-hoc group_id (e.g. "test-user", "user-1") causes saves and searches
-to target different partitions, making saved data invisible to subsequent searches.
+IMPORTANT — group_id: Always pass the group_id that identifies the current user in every call to
+add_memory, search_nodes, search_memory_facts, and any other tool. The group_id must come from your
+system configuration or instructions — never invent one. Each user's data is isolated by group_id;
+using the wrong value causes saves and searches to target the wrong partition.
 
 CRITICAL — search before you answer: Before responding to ANY question about what you know about
 the user, their history, preferences, location, or any stored fact, you MUST call BOTH
