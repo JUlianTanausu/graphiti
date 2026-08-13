@@ -524,6 +524,79 @@ async def add_memory(
 
 
 @mcp.tool()
+async def add_memory_sync(
+    name: str,
+    episode_body: str,
+    group_id: str | None = None,
+    source: str = 'text',
+    source_description: str = '',
+    uuid: str | None = None,
+    reference_time: str | None = None,
+    excluded_entity_types: list[str] | None = None,
+    custom_extraction_instructions: str | None = None,
+    previous_episode_uuids: list[str] | None = None,
+    update_communities: bool = False,
+    saga: str | None = None,
+    saga_previous_episode_uuid: str | None = None,
+) -> SuccessResponse | ErrorResponse:
+    """Add an episode to memory and wait until it is fully written to the graph.
+
+    Unlike add_memory (which returns immediately after queuing), this tool blocks
+    until the LLM extraction and FalkorDB write are complete. Use this when the
+    caller needs a guarantee that the data is available for retrieval before proceeding.
+
+    Args: identical to add_memory.
+    """
+    global graphiti_service, queue_service
+
+    if graphiti_service is None or queue_service is None:
+        return ErrorResponse(error='Services not initialized')
+
+    try:
+        parsed_reference_time = parse_reference_time(reference_time)
+    except ValueError as e:
+        return ErrorResponse(error=f'Invalid reference_time: {e}')
+
+    try:
+        effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
+
+        episode_type = EpisodeType.text
+        if source:
+            try:
+                episode_type = EpisodeType[source.lower()]
+            except (KeyError, AttributeError):
+                logger.warning(f"Unknown source type '{source}', using 'text' as default")
+                episode_type = EpisodeType.text
+
+        await queue_service.add_episode_sync(
+            group_id=effective_group_id,
+            name=name,
+            content=episode_body,
+            source_description=source_description,
+            episode_type=episode_type,
+            entity_types=graphiti_service.entity_types,
+            uuid=uuid or None,
+            reference_time=parsed_reference_time,
+            edge_types=graphiti_service.edge_types,
+            edge_type_map=graphiti_service.edge_type_map,
+            excluded_entity_types=excluded_entity_types,
+            previous_episode_uuids=previous_episode_uuids,
+            custom_extraction_instructions=custom_extraction_instructions,
+            update_communities=update_communities,
+            saga=saga,
+            saga_previous_episode_uuid=saga_previous_episode_uuid,
+        )
+
+        return SuccessResponse(
+            message=f"Episode '{name}' successfully written to graph in group '{effective_group_id}'"
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error in add_memory_sync: {error_msg}')
+        return ErrorResponse(error=f'Error processing episode: {error_msg}')
+
+
+@mcp.tool()
 async def search_nodes(
     query: str,
     group_ids: str | list[str] | None = None,

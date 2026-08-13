@@ -98,6 +98,68 @@ class QueueService:
         self._graphiti_client = graphiti_client
         logger.info('Queue service initialized with graphiti client')
 
+    async def add_episode_sync(
+        self,
+        group_id: str,
+        name: str,
+        content: str,
+        source_description: str,
+        episode_type: Any,
+        entity_types: Any,
+        uuid: str | None,
+        reference_time: datetime | None = None,
+        edge_types: Any = None,
+        edge_type_map: Any = None,
+        excluded_entity_types: list[str] | None = None,
+        previous_episode_uuids: list[str] | None = None,
+        custom_extraction_instructions: str | None = None,
+        update_communities: bool = False,
+        saga: str | None = None,
+        saga_previous_episode_uuid: str | None = None,
+    ) -> None:
+        """Add an episode and wait until it is actually written to the graph.
+
+        Unlike add_episode (which returns immediately after queuing), this method
+        awaits completion of the LLM extraction and FalkorDB write before returning.
+        """
+        if self._graphiti_client is None:
+            raise RuntimeError('Queue service not initialized. Call initialize() first.')
+
+        future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
+        async def process_episode_sync():
+            try:
+                logger.info(f'Processing episode {uuid} for group {group_id} (sync)')
+                await self._graphiti_client.add_episode(
+                    name=name,
+                    episode_body=content,
+                    source_description=source_description,
+                    source=episode_type,
+                    group_id=group_id,
+                    reference_time=reference_time or datetime.now(timezone.utc),
+                    entity_types=entity_types,
+                    edge_types=edge_types,
+                    edge_type_map=edge_type_map,
+                    excluded_entity_types=excluded_entity_types,
+                    previous_episode_uuids=previous_episode_uuids,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                    update_communities=update_communities,
+                    saga=saga,
+                    saga_previous_episode_uuid=saga_previous_episode_uuid,
+                    uuid=uuid,
+                )
+                logger.info(f'Successfully processed episode {uuid} for group {group_id} (sync)')
+                if not future.done():
+                    future.set_result(None)
+            except Exception as e:
+                logger.error(f'Failed to process episode {uuid} for group {group_id}: {str(e)}')
+                if not future.done():
+                    future.set_exception(e)
+                raise
+
+        await self.add_episode_task(group_id, process_episode_sync)
+        await future
+
     async def add_episode(
         self,
         group_id: str,
