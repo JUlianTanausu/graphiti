@@ -599,10 +599,7 @@ async def add_memory_sync(
 
 @mcp.tool()
 async def list_groups() -> SuccessResponse | ErrorResponse:
-    """Return a JSON array of all group_ids that have at least one episode in the graph.
-
-    Returns an empty JSON array if no episodes exist yet.
-    """
+    """Return a JSON array of all group_ids (FalkorDB graph names), excluding internal graphs."""
     global graphiti_service
 
     if graphiti_service is None:
@@ -610,11 +607,11 @@ async def list_groups() -> SuccessResponse | ErrorResponse:
 
     try:
         client = await graphiti_service.get_client()
-        records, _, _ = await client.driver.execute_query(
-            'MATCH (e:Episodic) WHERE e.group_id IS NOT NULL '
-            'RETURN DISTINCT e.group_id AS group_id ORDER BY e.group_id'
-        )
-        groups = [r['group_id'] for r in records if r.get('group_id')]
+        graphs = await client.driver.client.list_graphs()
+        groups = sorted([
+            g for g in graphs
+            if g != 'default_db' and not g.startswith('_')
+        ])
         return SuccessResponse(message=json.dumps(groups))
     except Exception as e:
         error_msg = str(e)
