@@ -20,6 +20,7 @@ from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -595,6 +596,73 @@ async def add_memory_sync(
         error_msg = str(e)
         logger.error(f'Error in add_memory_sync: {error_msg}')
         return ErrorResponse(error=f'Error processing episode: {error_msg}')
+
+
+@mcp.tool()
+async def add_memory_bulk(
+    episodes: list[dict],
+    group_id: str | None = None,
+) -> SuccessResponse | ErrorResponse:
+    """Process multiple episodes in bulk. Faster than add_memory_sync for large imports.
+
+    Each episode dict must have: name (str), episode_body (str),
+    reference_time (str ISO-8601), source_description (str), source (str, default 'text').
+
+    Args:
+        episodes: List of episode dicts.
+        group_id: Graph partition. Required — must not be empty.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Services not initialized')
+    if not episodes:
+        return ErrorResponse(error='episodes list is empty')
+
+    try:
+        effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
+        client = await graphiti_service.get_client()
+
+        if effective_group_id != client.driver._database:
+            client.driver = client.driver.clone(database=effective_group_id)
+            client.clients.driver = client.driver
+
+        raw_episodes = []
+        for ep in episodes:
+            try:
+                parsed_reference_time = parse_reference_time(ep.get('reference_time'))
+            except ValueError as e:
+                return ErrorResponse(error=f'Invalid reference_time in episode "{ep.get("name")}": {e}')
+            source_str = ep.get('source', 'text')
+            try:
+                episode_type = EpisodeType[source_str.lower()]
+            except (KeyError, AttributeError):
+                episode_type = EpisodeType.text
+            raw_episodes.append(RawEpisode(
+                name=ep.get('name', ''),
+                content=ep.get('episode_body', ''),
+                source_description=ep.get('source_description', ''),
+                source=episode_type,
+                reference_time=parsed_reference_time,
+            ))
+
+        results = await client.add_episode_bulk(
+            bulk_episodes=raw_episodes,
+            group_id=effective_group_id,
+            entity_types=graphiti_service.entity_types,
+            edge_types=graphiti_service.edge_types,
+            edge_type_map=graphiti_service.edge_type_map,
+        )
+
+        return SuccessResponse(message=json.dumps({
+            'succeeded': len(results.episodes),
+            'nodes': len(results.nodes),
+            'edges': len(results.edges),
+        }))
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error in add_memory_bulk: {error_msg}')
+        return ErrorResponse(error=f'Error in bulk import: {error_msg}')
 
 
 @mcp.tool()
