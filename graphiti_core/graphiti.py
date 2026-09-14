@@ -26,7 +26,7 @@ from typing_extensions import LiteralString
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.decorators import handle_multiple_group_ids
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,
@@ -47,6 +47,10 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.models.nodes.node_db_queries import (
+    SAGA_NODE_RETURN,
+    SAGA_NODE_RETURN_NEPTUNE,
+)
 from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
@@ -56,6 +60,7 @@ from graphiti_core.nodes import (
     Node,
     SagaNode,
     create_entity_node_embeddings,
+    get_saga_node_from_record,
 )
 from graphiti_core.prompts.lib import prompt_library
 from graphiti_core.prompts.summarize_sagas import SagaSummary
@@ -370,14 +375,12 @@ class Graphiti:
         SagaNode
             The existing or newly created saga node.
         """
-        from graphiti_core.helpers import parse_db_date
-
         driver = driver or self.driver
 
         records, _, _ = await driver.execute_query(
-            """
-            MATCH (s:Saga {name: $name, group_id: $group_id})
-            RETURN s.uuid AS uuid, s.name AS name, s.group_id AS group_id, s.created_at AS created_at
+            f"""
+            MATCH (s:Saga {{name: $name, group_id: $group_id}})
+            RETURN {SAGA_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else SAGA_NODE_RETURN}
             """,
             name=saga_name,
             group_id=group_id,
@@ -385,13 +388,12 @@ class Graphiti:
         )
 
         if records:
-            record = records[0]
-            return SagaNode(
-                uuid=record['uuid'],
-                name=record['name'],
-                group_id=record['group_id'],
-                created_at=parse_db_date(record['created_at']),  # type: ignore
-            )
+            # Full field set (summary, first/last_episode_uuid,
+            # last_summarized_at, ...) must round-trip here: add_episode()
+            # saves this object back at the end of every episode added to
+            # the saga, so a partial record would silently reset those
+            # fields to their defaults on the next episode.
+            return get_saga_node_from_record(records[0])
 
         saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
         await saga.save(driver)
