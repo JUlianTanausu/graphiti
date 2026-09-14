@@ -19,6 +19,15 @@ from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_senten
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
 
+# Synchronous label propagation (every node's new label is computed from the
+# same snapshot, then swapped in all at once) can oscillate forever on
+# symmetric/tied graph structures instead of converging — a known weakness of
+# this update rule, confirmed in production on a 154-node group where it
+# never converged in 120,000+ iterations. This cap guarantees termination;
+# if the cap is hit, the best clustering found so far is returned instead of
+# hanging the process indefinitely.
+MAX_LABEL_PROPAGATION_ITERATIONS = 100
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,7 +108,7 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    for _iteration in range(MAX_LABEL_PROPAGATION_ITERATIONS):
         no_change = True
         new_community_map: dict[str, int] = {}
 
@@ -129,6 +138,12 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             break
 
         community_map = new_community_map
+    else:
+        logger.warning(
+            f'label_propagation did not converge after {MAX_LABEL_PROPAGATION_ITERATIONS} '
+            'iterations (likely oscillating on a symmetric/tied structure) — '
+            'returning the best clustering found so far'
+        )
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
