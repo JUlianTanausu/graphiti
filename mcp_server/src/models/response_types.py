@@ -64,6 +64,11 @@ class BuildCommunitiesResponse(TypedDict):
     communities: list[CommunityResult]
 
 
+class CommunitySearchResponse(TypedDict):
+    message: str
+    communities: list[CommunityResult]
+
+
 class EdgeResult(TypedDict):
     uuid: str
     name: str

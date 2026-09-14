@@ -31,6 +31,7 @@ from config.schema import GraphitiConfig, ServerConfig
 from models.response_types import (
     BuildCommunitiesResponse,
     CommunityResult,
+    CommunitySearchResponse,
     EpisodeEntitiesResponse,
     EpisodeSearchResponse,
     ErrorResponse,
@@ -773,6 +774,80 @@ async def search_nodes(
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
         return ErrorResponse(error=f'Error searching nodes: {error_msg}')
+
+
+@mcp.tool()
+async def search_communities(
+    query: str,
+    group_ids: str | list[str] | None = None,
+    max_communities: int = 10,
+) -> CommunitySearchResponse | ErrorResponse:
+    """Search for communities (topic/entity clusters) in the graph memory.
+
+    Communities are higher-level groupings of densely-connected entities, built by
+    build_communities. Use this instead of search_nodes when the caller wants the
+    broad topics or clusters a query relates to, rather than individual entities —
+    e.g. "what areas of the user's life involve cooking?" rather than "find the
+    entity named lentejas". Requires build_communities to have been run for the
+    given group(s); returns no results otherwise.
+
+    Args:
+        query: The search query
+        group_ids: Optional group ID, or list of group IDs, to filter results (a single
+            string is accepted and treated as a one-element list)
+        max_communities: Maximum number of communities to return (default: 10)
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        group_ids = coerce_group_ids(group_ids)
+        effective_group_ids = [
+            normalize_group_id(g)
+            for g in (
+                group_ids
+                if group_ids is not None
+                else [config.graphiti.group_id]
+                if config.graphiti.group_id
+                else []
+            )
+        ]
+
+        from graphiti_core.search.search_config_recipes import COMMUNITY_HYBRID_SEARCH_RRF
+
+        results = await client.search_(
+            query=query,
+            config=COMMUNITY_HYBRID_SEARCH_RRF,
+            group_ids=effective_group_ids,
+        )
+
+        communities = results.communities[:max_communities] if results.communities else []
+
+        if not communities:
+            return CommunitySearchResponse(message='No relevant communities found', communities=[])
+
+        community_results: list[CommunityResult] = [
+            CommunityResult(
+                uuid=community.uuid,
+                name=community.name,
+                group_id=community.group_id,
+                summary=getattr(community, 'summary', None),
+            )
+            for community in communities
+        ]
+
+        return CommunitySearchResponse(
+            message='Communities retrieved successfully', communities=community_results
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error searching communities: {error_msg}')
+        return ErrorResponse(error=f'Error searching communities: {error_msg}')
 
 
 @mcp.tool()
