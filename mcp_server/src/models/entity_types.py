@@ -32,15 +32,30 @@ class Requirement(BaseModel):
 
 
 class Preference(BaseModel):
+    """A Preference represents a specific, named thing the user has expressed liking, disliking,
+    choosing, or avoiding — a particular food, brand, place, activity, or item they would
+    recognize by name later.
+
+    This classification does NOT override the base rule against extracting generic or bare
+    nouns. An opinion being expressed about something is not sufficient on its own — the thing
+    itself must still be specific enough to stand alone (the same bar as any other entity: could
+    it have its own Wikipedia article, or is it specific enough to distinguish from other items
+    of the same category?).
+
+    SHOULD be extracted (the preferred thing is specific): "prefiere el café descafeinado de
+    máquina nueva" -> extract "café descafeinado de máquina nueva"; "no quiere volver al bar de
+    la esquina" -> extract "el bar de la esquina".
+
+    Should NOT be extracted (the preferred thing is a bare generic noun, color, or abstract
+    reference, even though an opinion was expressed): "café" alone, "negro" alone, "música"
+    alone, "el volumen", "la comida". Do not extract a bare color, bare food word, or bare
+    object word just because it was mentioned favorably or unfavorably.
     """
-    IMPORTANT: Prioritize this classification over ALL other classifications.
 
-    Represents entities mentioned in contexts expressing user preferences, choices, opinions, or selections. Use LOW THRESHOLD for sensitivity.
-
-    Trigger patterns: "I want/like/prefer/choose X", "I don't want/dislike/avoid/reject Y", "X is better/worse", "rather have X than Y", "no X please", "skip X", "go with X instead", etc. Here, X or Y should be classified as Preference.
-    """
-
-    ...
+    description: str = Field(
+        ...,
+        description='Brief description of the preference and what specifically is preferred. Only use information mentioned in the context.',
+    )
 
 
 class Procedure(BaseModel):
@@ -87,17 +102,18 @@ class Location(BaseModel):
 
 
 class Event(BaseModel):
-    """An Event represents a time-bound activity, occurrence, or experience.
+    """An Event represents a specific, nameable occurrence — something with a distinct identity
+    the user would recognize by name later, not a generic recap of an ordinary day.
 
-    Instructions for identifying and extracting events:
-    1. Look for activities with specific time frames (meetings, appointments, deadlines)
-    2. Identify planned or scheduled occurrences (vacations, projects, celebrations)
-    3. Extract unplanned occurrences (accidents, interruptions, discoveries)
-    4. Capture the purpose or nature of the event
-    5. Include temporal information when available (past, present, future, duration)
-    6. Note participants or stakeholders involved in the event
-    7. Identify outcomes or consequences of the event when mentioned
-    8. Extract both recurring events and one-time occurrences
+    SHOULD be extracted: named or clearly distinguishable occurrences with a specific purpose —
+    a meeting, trip, appointment, celebration, accident, or a one-off activity described with
+    enough detail to identify it ("cena de cumpleaños de Marta", "hackathon del laboratorio").
+
+    Should NOT be extracted: a generic mention of "today", "the usual routine", "my everyday
+    schedule", a diary-style recap of ordinary daily activities, or a bare activity/occasion word
+    with no distinguishing detail ("fiesta" alone, "reunión" alone, "rutina" alone). If it
+    wouldn't be distinguishable from every other day like it when read alone later, do not
+    extract it as an Event.
     """
 
     description: str = Field(
