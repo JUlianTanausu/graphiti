@@ -145,19 +145,25 @@ class Object(BaseModel):
 
 
 class Topic(BaseModel):
-    """A Topic represents a subject of conversation, interest, or knowledge domain.
+    """A Topic represents a specific, named subject the user is genuinely interested in, follows,
+    or practices — a hobby, sport, skill, field of study, or knowledge domain they would
+    recognize as one of their own interests.
 
-    IMPORTANT: Use this classification ONLY as a last resort. First check if entity fits into:
-    User, Assistant, Preference, Organization, Document, Event, Location - if so, use those instead.
+    First check if the entity fits Preference, Event, Organization, Location, or Document — use
+    those instead when they apply. Otherwise, Topic is the right classification for a person's
+    interests and pastimes; it is not a fallback of last resort, and personal interests are
+    exactly what this memory system exists to remember.
 
-    Instructions for identifying and extracting topics:
-    1. Look for subjects being discussed or areas of interest (health, technology, sports)
-    2. Identify knowledge domains or fields of study
-    3. Extract themes that span multiple conversations or contexts
-    4. Include specific subtopics when mentioned (e.g., "machine learning" rather than just "AI")
-    5. Capture topics associated with projects, work, or hobbies
-    6. Note the context in which the topic appears
-    7. Avoid extracting topics that are better classified as Events, Documents, or Organizations
+    SHOULD be extracted: a named hobby, sport, or practice the person actively engages in
+    (senderismo, yoga, ajedrez, guitarra española), a specific field or skill they are learning
+    or work in (machine learning, panadería, carpintería), a named recurring subject they follow
+    (baloncesto, política local) — extracted even without an attached measurable fact, as long as
+    the name itself is specific.
+
+    Should NOT be extracted: a vague placeholder that still needs a specific name to mean
+    anything ("deporte" alone, "un hobby", "tecnología" alone, "música" alone unless a specific
+    genre/artist/instrument is named), or a one-off event/occasion (those belong to Event, not
+    Topic).
     """
 
     description: str = Field(
