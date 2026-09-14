@@ -648,6 +648,7 @@ class Graphiti:
         uuid_map: dict[str, str],
         custom_extraction_instructions: str | None = None,
         clients: GraphitiClients | None = None,
+        extracted_edges: list[EntityEdge] | None = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode(s) and resolve against existing graph.
 
@@ -657,6 +658,11 @@ class Graphiti:
             Optional request-scoped clients bundle. Defaults to ``self.clients``.
             Callers pass a per-request bundle so concurrent calls for different
             group_ids target the correct database (issue #1676).
+        extracted_edges : list[EntityEdge] | None
+            Optional pre-extracted edges (e.g. from a combined nodes+edges LLM
+            call). When provided, the separate extract_edges() LLM call is
+            skipped entirely and these edges go straight to pointer resolution
+            and dedup/invalidation against the existing graph.
 
         Returns
         -------
@@ -670,16 +676,17 @@ class Graphiti:
         episodes = episode if isinstance(episode, list) else [episode]
         primary_episode = episodes[0]
 
-        extracted_edges = await extract_edges(
-            clients,
-            episode,
-            extracted_nodes,
-            previous_episodes,
-            edge_type_map,
-            group_id,
-            edge_types,
-            custom_extraction_instructions,
-        )
+        if extracted_edges is None:
+            extracted_edges = await extract_edges(
+                clients,
+                episode,
+                extracted_nodes,
+                previous_episodes,
+                edge_type_map,
+                group_id,
+                edge_types,
+                custom_extraction_instructions,
+            )
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
@@ -1055,6 +1062,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        use_combined_extraction: bool = False,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1102,6 +1110,12 @@ class Graphiti:
             query to find the most recent episode. Useful for efficiently adding multiple episodes
             to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
             as this parameter for the next episode.
+        use_combined_extraction : bool
+            Optional. When True, extracts nodes and edges in a single LLM call instead of two
+            sequential calls (same combined-extraction path already used by add_episode_bulk).
+            Cuts one round trip off the critical path per episode with no change to how nodes/
+            edges are resolved against the existing graph — dedup and invalidation are unchanged.
+            Defaults to False to preserve existing behavior for callers that haven't opted in.
 
         Returns
         -------
@@ -1173,15 +1187,34 @@ class Graphiti:
                     else {('Entity', 'Entity'): []}
                 )
 
-                # Extract and resolve nodes
-                extracted_nodes, node_episode_index_map = await extract_nodes(
-                    clients,
-                    episode,
-                    previous_episodes,
-                    entity_types,
-                    excluded_entity_types,
-                    custom_extraction_instructions,
-                )
+                # Extract nodes (and, if requested, edges in the same call)
+                pre_extracted_edges: list[EntityEdge] | None = None
+                if use_combined_extraction:
+                    from graphiti_core.utils.maintenance.combined_extraction import (
+                        extract_nodes_and_edges as extract_combined,
+                    )
+
+                    extracted_nodes, pre_extracted_edges, node_episode_index_map = (
+                        await extract_combined(
+                            clients,
+                            episode,
+                            previous_episodes,
+                            entity_types,
+                            excluded_entity_types,
+                            edge_type_map or edge_type_map_default,
+                            edge_types,
+                            custom_extraction_instructions,
+                        )
+                    )
+                else:
+                    extracted_nodes, node_episode_index_map = await extract_nodes(
+                        clients,
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                        excluded_entity_types,
+                        custom_extraction_instructions,
+                    )
 
                 nodes, uuid_map, _ = await resolve_extracted_nodes(
                     clients,
@@ -1191,7 +1224,7 @@ class Graphiti:
                     entity_types,
                 )
 
-                # Extract and resolve edges in parallel with attribute extraction
+                # Extract (unless already extracted above) and resolve edges
                 (
                     resolved_edges,
                     invalidated_edges,
@@ -1207,6 +1240,7 @@ class Graphiti:
                     uuid_map,
                     custom_extraction_instructions,
                     clients=clients,
+                    extracted_edges=pre_extracted_edges,
                 )
 
                 entity_edges = resolved_edges + invalidated_edges

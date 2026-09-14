@@ -404,6 +404,7 @@ async def add_memory(
     update_communities: bool = False,
     saga: str | None = None,
     saga_previous_episode_uuid: str | None = None,
+    use_combined_extraction: bool = False,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
@@ -443,6 +444,10 @@ async def add_memory(
                                  episodes so their evolving narrative can be summarized via summarize_saga.
         saga_previous_episode_uuid (str, optional): UUID of the preceding episode in the saga, used to
                                  order episodes within the saga.
+        use_combined_extraction (bool, optional): Extract entities and facts in a single LLM call
+                                 instead of two sequential calls. Cuts extraction latency with no
+                                 change to how results are resolved against the existing graph.
+                                 Defaults to False.
 
     Examples:
         # Adding plain text content
@@ -514,6 +519,7 @@ async def add_memory(
             update_communities=update_communities,
             saga=saga,
             saga_previous_episode_uuid=saga_previous_episode_uuid,
+            use_combined_extraction=use_combined_extraction,
         )
 
         return SuccessResponse(
@@ -540,6 +546,7 @@ async def add_memory_sync(
     update_communities: bool = False,
     saga: str | None = None,
     saga_previous_episode_uuid: str | None = None,
+    use_combined_extraction: bool = False,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory and wait until it is fully written to the graph.
 
@@ -587,6 +594,7 @@ async def add_memory_sync(
             update_communities=update_communities,
             saga=saga,
             saga_previous_episode_uuid=saga_previous_episode_uuid,
+            use_combined_extraction=use_combined_extraction,
         )
 
         return SuccessResponse(

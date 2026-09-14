@@ -116,6 +116,7 @@ class QueueService:
         update_communities: bool = False,
         saga: str | None = None,
         saga_previous_episode_uuid: str | None = None,
+        use_combined_extraction: bool = False,
     ) -> None:
         """Add an episode and wait until it is actually written to the graph.
 
@@ -147,6 +148,7 @@ class QueueService:
                     saga=saga,
                     saga_previous_episode_uuid=saga_previous_episode_uuid,
                     uuid=uuid,
+                    use_combined_extraction=use_combined_extraction,
                 )
                 logger.info(f'Successfully processed episode {uuid} for group {group_id} (sync)')
                 if not future.done():
@@ -178,6 +180,7 @@ class QueueService:
         update_communities: bool = False,
         saga: str | None = None,
         saga_previous_episode_uuid: str | None = None,
+        use_combined_extraction: bool = False,
     ) -> int:
         """Add an episode for processing.
 
@@ -204,6 +207,8 @@ class QueueService:
                 ingestion
             saga: Optional saga name/id to attach this episode to
             saga_previous_episode_uuid: Optional UUID of the prior episode in the saga
+            use_combined_extraction: Extract nodes and edges in one LLM call
+                instead of two (see Graphiti.add_episode)
 
         Returns:
             The position in the queue
@@ -234,6 +239,7 @@ class QueueService:
                     saga=saga,
                     saga_previous_episode_uuid=saga_previous_episode_uuid,
                     uuid=uuid,
+                    use_combined_extraction=use_combined_extraction,
                 )
 
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')
