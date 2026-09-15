@@ -1054,16 +1054,27 @@ async def get_episodes(
             )
         ]
 
-        # Get episodes from the driver directly
+        # Get episodes from the driver directly.
+        # Each group_id maps to a separate FalkorDB graph; using the shared
+        # client.driver (which points to default_db) would find nothing.
+        # Clone the driver per group_id so the query targets the right graph.
         from graphiti_core.nodes import EpisodicNode
 
         if effective_group_ids:
-            episodes = await EpisodicNode.get_by_group_ids(
-                client.driver, effective_group_ids, limit=max_episodes
+            all_episodes = []
+            for gid in effective_group_ids:
+                gid_driver = client.driver.clone(database=gid)
+                gid_episodes = await EpisodicNode.get_by_group_ids(
+                    gid_driver, [gid], limit=max_episodes
+                )
+                all_episodes.extend(gid_episodes)
+            # Sort descending by created_at; entries without a timestamp sort last
+            all_episodes.sort(
+                key=lambda e: e.created_at or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True,
             )
+            episodes = all_episodes[:max_episodes]
         else:
-            # If no group IDs, we need to use a different approach
-            # For now, return empty list when no group IDs specified
             episodes = []
 
         if not episodes:
