@@ -406,6 +406,7 @@ async def add_memory(
     saga: str | None = None,
     saga_previous_episode_uuid: str | None = None,
     use_combined_extraction: bool = False,
+    episode_metadata: dict | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
@@ -521,6 +522,7 @@ async def add_memory(
             saga=saga,
             saga_previous_episode_uuid=saga_previous_episode_uuid,
             use_combined_extraction=use_combined_extraction,
+            episode_metadata=episode_metadata,
         )
 
         return SuccessResponse(
@@ -548,6 +550,7 @@ async def add_memory_sync(
     saga: str | None = None,
     saga_previous_episode_uuid: str | None = None,
     use_combined_extraction: bool = False,
+    episode_metadata: dict | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory and wait until it is fully written to the graph.
 
@@ -596,6 +599,7 @@ async def add_memory_sync(
             saga=saga,
             saga_previous_episode_uuid=saga_previous_episode_uuid,
             use_combined_extraction=use_combined_extraction,
+            episode_metadata=episode_metadata,
         )
 
         return SuccessResponse(
