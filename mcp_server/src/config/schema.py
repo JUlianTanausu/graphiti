@@ -148,6 +148,16 @@ class LLMConfig(BaseModel):
 
     provider: str = Field(default='openai', description='LLM provider')
     model: str = Field(default='gpt-5.5', description='Model name')
+    small_model: str | None = Field(
+        default=None,
+        description=(
+            'Model (or Azure deployment name) used for simpler auxiliary calls '
+            '(edge timestamp extraction, edge dedup/resolution, entity attribute '
+            'extraction, node summaries — see graphiti_core ModelSize.small call '
+            'sites). Falls back to `model` when unset, so a resource without a '
+            'distinct small deployment behaves exactly as before.'
+        ),
+    )
     temperature: float | None = Field(
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )

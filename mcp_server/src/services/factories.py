@@ -144,8 +144,10 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # Use the same model for both main and small model slots
-                small_model = config.model
+                # Use the configured small_model for the ModelSize.small call
+                # sites (edge dedup, timestamps, attributes, summaries) when
+                # set; otherwise mirror the main model, same as before.
+                small_model = config.small_model or config.model
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
@@ -213,14 +215,16 @@ class LLMClientFactory:
                 # Then create the LLMConfig
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # Use the same model for both main and small model slots so that
-                # operations requesting ModelSize.small don't fall back to DEFAULT_SMALL_MODEL
-                # ('gpt-4.1-nano'), which is unlikely to exist as an Azure deployment.
+                # Use the configured small_model (an Azure deployment name) for
+                # the ModelSize.small call sites when set. Falling back to
+                # mirroring the main model, rather than DEFAULT_SMALL_MODEL
+                # ('gpt-4.1-nano'), stays the safe default for Azure resources
+                # where the deployment name may not match the model name.
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
                     base_url=base_url,
                     model=config.model,
-                    small_model=config.model,
+                    small_model=config.small_model or config.model,
                     # None is intentional for reasoning models; core LLMConfig stores it
                     # verbatim and downstream clients omit temperature when it is None.
                     temperature=config.temperature,  # type: ignore[arg-type]

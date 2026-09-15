@@ -166,3 +166,55 @@ class TestAzureReasoningEffort:
         client = LLMClientFactory.create(self._config('gpt-4.1'))
         assert isinstance(client, AzureOpenAILLMClient)
         assert client.reasoning is None
+
+
+class TestSmallModel:
+    """The factory should honor a configured small_model, and only fall back
+    to mirroring the main model when none is configured (the safe default
+    for Azure resources where the deployment name may not match the model
+    name)."""
+
+    @staticmethod
+    def _azure_config(model: str, small_model: str | None) -> LLMConfig:
+        return LLMConfig(
+            provider='azure_openai',
+            model=model,
+            small_model=small_model,
+            providers=LLMProvidersConfig(
+                azure_openai=AzureOpenAIProviderConfig(
+                    api_key='test-key',
+                    api_url='https://example.openai.azure.com',
+                )
+            ),
+        )
+
+    @staticmethod
+    def _openai_config(model: str, small_model: str | None) -> LLMConfig:
+        return LLMConfig(
+            provider='openai',
+            model=model,
+            small_model=small_model,
+            providers=LLMProvidersConfig(
+                openai=OpenAIProviderConfig(api_key='test-key', api_url='https://api.openai.com/v1')
+            ),
+        )
+
+    def test_azure_uses_configured_small_model_when_set(self):
+        client = LLMClientFactory.create(self._azure_config('gpt-4o', 'gpt-4.1-nano'))
+        assert isinstance(client, AzureOpenAILLMClient)
+        assert client.small_model == 'gpt-4.1-nano'
+
+    def test_azure_falls_back_to_model_when_small_model_unset(self):
+        client = LLMClientFactory.create(self._azure_config('gpt-4o', None))
+        assert isinstance(client, AzureOpenAILLMClient)
+        assert client.small_model == 'gpt-4o'
+
+    def test_openai_uses_configured_small_model_when_set(self):
+        client = LLMClientFactory.create(self._openai_config('gpt-5.5', 'gpt-4.1-nano'))
+        assert isinstance(client, OpenAIClient)
+        assert client.small_model == 'gpt-4.1-nano'
+
+    def test_openai_falls_back_to_model_when_small_model_unset(self):
+        client = LLMClientFactory.create(self._openai_config('gpt-5.5', None))
+        assert isinstance(client, OpenAIClient)
+        assert client.small_model == 'gpt-5.5'
