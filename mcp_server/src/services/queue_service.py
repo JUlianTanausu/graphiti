@@ -117,6 +117,7 @@ class QueueService:
         saga: str | None = None,
         saga_previous_episode_uuid: str | None = None,
         use_combined_extraction: bool = False,
+        episode_metadata: dict | None = None,
     ) -> None:
         """Add an episode and wait until it is actually written to the graph.
 
@@ -149,6 +150,7 @@ class QueueService:
                     saga_previous_episode_uuid=saga_previous_episode_uuid,
                     uuid=uuid,
                     use_combined_extraction=use_combined_extraction,
+                    episode_metadata=episode_metadata,
                 )
                 logger.info(f'Successfully processed episode {uuid} for group {group_id} (sync)')
                 if not future.done():
@@ -181,6 +183,7 @@ class QueueService:
         saga: str | None = None,
         saga_previous_episode_uuid: str | None = None,
         use_combined_extraction: bool = False,
+        episode_metadata: dict | None = None,
     ) -> int:
         """Add an episode for processing.
 
@@ -240,6 +243,7 @@ class QueueService:
                     saga_previous_episode_uuid=saga_previous_episode_uuid,
                     uuid=uuid,
                     use_combined_extraction=use_combined_extraction,
+                    episode_metadata=episode_metadata,
                 )
 
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')
