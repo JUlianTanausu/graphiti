@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from typing import Any
 from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
@@ -1065,6 +1066,7 @@ class Graphiti:
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
         use_combined_extraction: bool = False,
+        episode_metadata: dict[str, Any] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1179,6 +1181,7 @@ class Graphiti:
                         source_description=source_description,
                         created_at=now,
                         valid_at=reference_time,
+                        episode_metadata=episode_metadata,
                     )
                 )
 
