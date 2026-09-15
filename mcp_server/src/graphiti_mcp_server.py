@@ -208,11 +208,13 @@ mcp = FastMCP(
             "localhost:*",
             "127.0.0.1:*",
             "10.95.150.131:*",
+            "pioneer10.hi.inet:*",
         ],
         allowed_origins=[
             "http://localhost:*",
             "http://127.0.0.1:*",
             "http://10.95.150.131:*",
+            "http://pioneer10.hi.inet:*",
         ],
     ),
 )
