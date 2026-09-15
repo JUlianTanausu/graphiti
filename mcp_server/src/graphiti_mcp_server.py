@@ -1064,8 +1064,12 @@ async def get_episodes(
             all_episodes = []
             for gid in effective_group_ids:
                 gid_driver = client.driver.clone(database=gid)
+                # No DB-level limit: get_by_group_ids uses ORDER BY uuid DESC
+                # (uuid is random, not temporal), so a limit there would return
+                # arbitrary episodes. Fetch all, sort by created_at in Python,
+                # then slice to max_episodes.
                 gid_episodes = await EpisodicNode.get_by_group_ids(
-                    gid_driver, [gid], limit=max_episodes
+                    gid_driver, [gid], limit=None
                 )
                 all_episodes.extend(gid_episodes)
             # Sort descending by created_at; entries without a timestamp sort last
