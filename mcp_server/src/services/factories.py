@@ -210,6 +210,8 @@ class LLMClientFactory:
                 azure_client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,
+                    timeout=75,
+                    max_retries=0,
                 )
 
                 # Then create the LLMConfig
@@ -367,6 +369,8 @@ class EmbedderFactory:
                 azure_client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,
+                    timeout=75,
+                    max_retries=0,
                 )
 
                 return AzureOpenAIEmbedderClient(
@@ -499,7 +503,7 @@ class CrossEncoderFactory:
 
                 logger.info(f'Using OpenAIRerankerClient (Azure) from {source} provider')
                 return OpenAIRerankerClient(
-                    client=AsyncOpenAI(base_url=base_url, api_key=azure_config.api_key)
+                    client=AsyncOpenAI(base_url=base_url, api_key=azure_config.api_key, timeout=75, max_retries=0)
                 )
 
             case 'gemini':
