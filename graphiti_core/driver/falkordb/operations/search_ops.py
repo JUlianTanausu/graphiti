@@ -131,7 +131,7 @@ class FalkorSearchOperations(SearchOperations):
 
         k_candidates = max(limit * 20, 100)
 
-        post_filter_conditions = list(filter_queries) + ['score > $min_score']
+        post_filter_conditions = list(filter_queries) + ['(1 + score)/2 > $min_score']
         post_filter_str = ' AND '.join(post_filter_conditions)
 
         vector_cypher = (
@@ -152,7 +152,8 @@ class FalkorSearchOperations(SearchOperations):
                 k_candidates=k_candidates,
                 **filter_params,
             )
-        except Exception:
+        except Exception as e:
+            logger.warning('HNSW vector search failed, falling back to full scan: %s', e)
             # Fallback: índice HNSW no disponible — full-scan O(n)
             filter_query = ''
             if filter_queries:

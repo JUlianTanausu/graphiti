@@ -331,13 +331,11 @@ class FalkorDriver(GraphDriver):
         for query in index_queries:
             await self.execute_query(query)
         vector_index_query = (
-            f"CREATE VECTOR INDEX FOR (n:Entity) ON (n.name_embedding) "
+            'CREATE VECTOR INDEX FOR (n:Entity) ON (n.name_embedding) '
             f"OPTIONS {{dimension: {VECTOR_EMBEDDING_DIM}, similarityFunction: 'cosine'}}"
         )
-        try:
+        with suppress(Exception):
             await self.execute_query(vector_index_query)
-        except Exception:
-            pass  # Idempotente: el índice ya existe
 
     def clone(self, database: str) -> 'GraphDriver':
         """
