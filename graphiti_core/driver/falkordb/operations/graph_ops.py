@@ -69,6 +69,19 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
         for query in index_queries:
             await executor.execute_query(query)
 
+        # Vector index HNSW — búsqueda de similitud O(log n) en vez de full-scan O(n)
+        vector_index_queries = [
+            (
+                "CREATE VECTOR INDEX FOR (n:Entity) ON (n.name_embedding) "
+                "OPTIONS {dimension: 1024, similarityFunction: 'cosine'}"
+            ),
+        ]
+        for query in vector_index_queries:
+            try:
+                await executor.execute_query(query)
+            except Exception:
+                pass  # Idempotente: el índice ya existe
+
     async def delete_all_indexes(
         self,
         executor: QueryExecutor,
