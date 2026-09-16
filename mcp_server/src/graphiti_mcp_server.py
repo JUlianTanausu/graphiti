@@ -617,15 +617,22 @@ async def add_memory_sync(
 async def add_memory_bulk(
     episodes: list[dict],
     group_id: str | None = None,
+    custom_extraction_instructions: str | None = None,
+    excluded_entity_types: list[str] | None = None,
+    saga: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Process multiple episodes in bulk. Faster than add_memory_sync for large imports.
 
     Each episode dict must have: name (str), episode_body (str),
     reference_time (str ISO-8601), source_description (str), source (str, default 'text').
+    Each episode dict may also include episode_metadata (dict, optional).
 
     Args:
         episodes: List of episode dicts.
         group_id: Graph partition. Required — must not be empty.
+        custom_extraction_instructions: Optional instructions to guide entity/edge extraction.
+        excluded_entity_types: Optional list of entity type names to exclude from extraction.
+        saga: Optional saga name to associate all episodes with.
     """
     global graphiti_service
 
@@ -659,6 +666,7 @@ async def add_memory_bulk(
                 source_description=ep.get('source_description', ''),
                 source=episode_type,
                 reference_time=parsed_reference_time,
+                episode_metadata=ep.get('episode_metadata') or None,
             ))
 
         results = await client.add_episode_bulk(
@@ -667,6 +675,9 @@ async def add_memory_bulk(
             entity_types=graphiti_service.entity_types,
             edge_types=graphiti_service.edge_types,
             edge_type_map=graphiti_service.edge_type_map,
+            custom_extraction_instructions=custom_extraction_instructions,
+            excluded_entity_types=excluded_entity_types,
+            saga=saga,
         )
 
         return SuccessResponse(message=json.dumps({
