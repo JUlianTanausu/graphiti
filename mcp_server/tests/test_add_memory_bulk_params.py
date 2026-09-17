@@ -25,7 +25,7 @@ def mock_client():
     client.add_episode_bulk = AsyncMock(return_value=result)
     client.driver = MagicMock()
     client.driver._database = 'test_group'
-    client.driver.clone = MagicMock(return_value=client.driver)
+    client.driver.clone = MagicMock(return_value=MagicMock(name='cloned_driver'))
     client.clients = MagicMock()
     client.clients.driver = client.driver
     return client

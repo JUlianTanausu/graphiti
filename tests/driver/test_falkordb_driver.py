@@ -243,6 +243,7 @@ class TestFalkorDriver:
         warning, not silently swallowed — see
         docs/superpowers/specs/2026-09-17-reindex-after-graph-delete-design.md.
         """
+
         async def fake_execute_query(query, **kwargs):
             if 'VECTOR INDEX' in query:
                 raise Exception('dimension mismatch')

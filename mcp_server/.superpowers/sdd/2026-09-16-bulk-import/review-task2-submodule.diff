@@ -1,0 +1,266 @@
+# Task 2 — Submodule diff (d52dbde..1e5b630)
+
+1e5b630 feat(mcp): extend add_memory_bulk with custom_extraction_instructions, excluded_entity_types, saga and per-episode episode_metadata
+
+ .../sdd/2026-09-16-bulk-import/task-2-report.md    |  40 +++++++
+ mcp_server/src/graphiti_mcp_server.py              |  11 ++
+ mcp_server/tests/test_add_memory_bulk_params.py    | 131 +++++++++++++++++++++
+ 3 files changed, 182 insertions(+)
+
+diff --git a/mcp_server/.superpowers/sdd/2026-09-16-bulk-import/task-2-report.md b/mcp_server/.superpowers/sdd/2026-09-16-bulk-import/task-2-report.md
+new file mode 100644
+index 0000000..ea98d02
+--- /dev/null
++++ b/mcp_server/.superpowers/sdd/2026-09-16-bulk-import/task-2-report.md
+@@ -0,0 +1,40 @@
++# Task 2 Report — bulk-import: add_memory_bulk new parameters
++
++**Status:** DONE  
++**Date:** 2026-09-16  
++**Branch:** feat/bulk-import
++
++## Changes
++
++### `mcp_server/src/graphiti_mcp_server.py`
++- Added three new optional parameters to `add_memory_bulk`:
++  - `custom_extraction_instructions: str | None = None`
++  - `excluded_entity_types: list[str] | None = None`
++  - `saga: str | None = None`
++- Added per-episode `episode_metadata` mapping: `ep.get('episode_metadata') or None` passed to `RawEpisode(episode_metadata=...)`
++- Forwarded all three new params to `client.add_episode_bulk(...)`
++- Updated docstring to document the new parameters
++
++### `mcp_server/tests/test_add_memory_bulk_params.py` (new file)
++Five unit tests using `AsyncMock` / `MagicMock` with `patch.object(..., create=True)`:
++
++| Test | Verifies |
++|---|---|
++| `test_custom_extraction_instructions_passed_through` | kwarg forwarded to `add_episode_bulk` |
++| `test_excluded_entity_types_passed_through` | kwarg forwarded to `add_episode_bulk` |
++| `test_saga_passed_through` | kwarg forwarded to `add_episode_bulk` |
++| `test_episode_metadata_per_episode` | per-episode dict value reaches `RawEpisode` |
++| `test_episode_metadata_defaults_to_none` | absent key → `None` in `RawEpisode` |
++
++## Test results
++
++```
++5 passed in 0.67s
++```
++
++Command: `cd mcp_server && uv run pytest tests/test_add_memory_bulk_params.py -v`
++
++## Notes
++
++- `config` is declared as a bare type annotation (`config: GraphitiConfig`) at module level — no initial value. `patch.object(..., create=True)` is required to mock it.
++- `add_episode_bulk` in graphiti_core already accepted all three new params; only the MCP wrapper needed updating.
+diff --git a/mcp_server/src/graphiti_mcp_server.py b/mcp_server/src/graphiti_mcp_server.py
+index 38c5753..8238542 100644
+--- a/mcp_server/src/graphiti_mcp_server.py
++++ b/mcp_server/src/graphiti_mcp_server.py
+@@ -610,29 +610,36 @@ async def add_memory_sync(
+     except Exception as e:
+         error_msg = str(e)
+         logger.error(f'Error in add_memory_sync: {error_msg}')
+         return ErrorResponse(error=f'Error processing episode: {error_msg}')
+ 
+ 
+ @mcp.tool()
+ async def add_memory_bulk(
+     episodes: list[dict],
+     group_id: str | None = None,
++    custom_extraction_instructions: str | None = None,
++    excluded_entity_types: list[str] | None = None,
++    saga: str | None = None,
+ ) -> SuccessResponse | ErrorResponse:
+     """Process multiple episodes in bulk. Faster than add_memory_sync for large imports.
+ 
+     Each episode dict must have: name (str), episode_body (str),
+     reference_time (str ISO-8601), source_description (str), source (str, default 'text').
++    Each episode dict may also include episode_metadata (dict, optional).
+ 
+     Args:
+         episodes: List of episode dicts.
+         group_id: Graph partition. Required — must not be empty.
++        custom_extraction_instructions: Optional instructions to guide entity/edge extraction.
++        excluded_entity_types: Optional list of entity type names to exclude from extraction.
++        saga: Optional saga name to associate all episodes with.
+     """
+     global graphiti_service
+ 
+     if graphiti_service is None:
+         return ErrorResponse(error='Services not initialized')
+     if not episodes:
+         return ErrorResponse(error='episodes list is empty')
+ 
+     try:
+         effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
+@@ -652,28 +659,32 @@ async def add_memory_bulk(
+             try:
+                 episode_type = EpisodeType[source_str.lower()]
+             except (KeyError, AttributeError):
+                 episode_type = EpisodeType.text
+             raw_episodes.append(RawEpisode(
+                 name=ep.get('name', ''),
+                 content=ep.get('episode_body', ''),
+                 source_description=ep.get('source_description', ''),
+                 source=episode_type,
+                 reference_time=parsed_reference_time,
++                episode_metadata=ep.get('episode_metadata') or None,
+             ))
+ 
+         results = await client.add_episode_bulk(
+             bulk_episodes=raw_episodes,
+             group_id=effective_group_id,
+             entity_types=graphiti_service.entity_types,
+             edge_types=graphiti_service.edge_types,
+             edge_type_map=graphiti_service.edge_type_map,
++            custom_extraction_instructions=custom_extraction_instructions,
++            excluded_entity_types=excluded_entity_types,
++            saga=saga,
+         )
+ 
+         return SuccessResponse(message=json.dumps({
+             'succeeded': len(results.episodes),
+             'nodes': len(results.nodes),
+             'edges': len(results.edges),
+         }))
+     except Exception as e:
+         error_msg = str(e)
+         logger.error(f'Error in add_memory_bulk: {error_msg}')
+diff --git a/mcp_server/tests/test_add_memory_bulk_params.py b/mcp_server/tests/test_add_memory_bulk_params.py
+new file mode 100644
+index 0000000..dbd58e7
+--- /dev/null
++++ b/mcp_server/tests/test_add_memory_bulk_params.py
+@@ -0,0 +1,131 @@
++#!/usr/bin/env python3
++"""Tests for add_memory_bulk new parameters:
++custom_extraction_instructions, excluded_entity_types, saga, and
++per-episode episode_metadata.
++"""
++
++import sys
++from pathlib import Path
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
++
++import graphiti_mcp_server as mod
++
++
++@pytest.fixture
++def mock_client():
++    client = MagicMock()
++    result = MagicMock()
++    result.episodes = []
++    result.nodes = []
++    result.edges = []
++    client.add_episode_bulk = AsyncMock(return_value=result)
++    client.driver = MagicMock()
++    client.driver._database = 'test_group'
++    client.driver.clone = MagicMock(return_value=client.driver)
++    client.clients = MagicMock()
++    return client
++
++
++@pytest.fixture
++def mock_service(mock_client):
++    service = MagicMock()
++    service.get_client = AsyncMock(return_value=mock_client)
++    service.entity_types = {}
++    service.edge_types = {}
++    service.edge_type_map = {}
++    return service
++
++
++_BASE_EP = {
++    'name': 'ep1',
++    'episode_body': 'some content',
++    'reference_time': '2026-09-16T00:00:00Z',
++    'source_description': 'test source',
++    'source': 'text',
++}
++
++
++_MOCK_CONFIG = MagicMock(graphiti=MagicMock(group_id='test_group'))
++
++
++async def test_custom_extraction_instructions_passed_through(mock_service, mock_client):
++    """custom_extraction_instructions is forwarded to add_episode_bulk."""
++    with (
++        patch.object(mod, 'graphiti_service', mock_service),
++        patch.object(mod, 'config', _MOCK_CONFIG, create=True),
++    ):
++        await mod.add_memory_bulk(
++            episodes=[_BASE_EP],
++            custom_extraction_instructions='Extract only names.',
++        )
++
++    mock_client.add_episode_bulk.assert_called_once()
++    kwargs = mock_client.add_episode_bulk.call_args.kwargs
++    assert kwargs.get('custom_extraction_instructions') == 'Extract only names.'
++
++
++async def test_excluded_entity_types_passed_through(mock_service, mock_client):
++    """excluded_entity_types is forwarded to add_episode_bulk."""
++    with (
++        patch.object(mod, 'graphiti_service', mock_service),
++        patch.object(mod, 'config', _MOCK_CONFIG, create=True),
++    ):
++        await mod.add_memory_bulk(
++            episodes=[_BASE_EP],
++            excluded_entity_types=['Person', 'Location'],
++        )
++
++    mock_client.add_episode_bulk.assert_called_once()
++    kwargs = mock_client.add_episode_bulk.call_args.kwargs
++    assert kwargs.get('excluded_entity_types') == ['Person', 'Location']
++
++
++async def test_saga_passed_through(mock_service, mock_client):
++    """saga is forwarded to add_episode_bulk."""
++    with (
++        patch.object(mod, 'graphiti_service', mock_service),
++        patch.object(mod, 'config', _MOCK_CONFIG, create=True),
++    ):
++        await mod.add_memory_bulk(
++            episodes=[_BASE_EP],
++            saga='my_saga',
++        )
++
++    mock_client.add_episode_bulk.assert_called_once()
++    kwargs = mock_client.add_episode_bulk.call_args.kwargs
++    assert kwargs.get('saga') == 'my_saga'
++
++
++async def test_episode_metadata_per_episode(mock_service, mock_client):
++    """episode_metadata from each episode dict is passed to RawEpisode."""
++    ep_with_meta = {**_BASE_EP, 'episode_metadata': {'author': 'alice', 'priority': 1}}
++    with (
++        patch.object(mod, 'graphiti_service', mock_service),
++        patch.object(mod, 'config', _MOCK_CONFIG, create=True),
++    ):
++        await mod.add_memory_bulk(episodes=[ep_with_meta])
++
++    mock_client.add_episode_bulk.assert_called_once()
++    kwargs = mock_client.add_episode_bulk.call_args.kwargs
++    raw_episodes = kwargs.get('bulk_episodes')
++    assert raw_episodes is not None and len(raw_episodes) == 1
++    assert raw_episodes[0].episode_metadata == {'author': 'alice', 'priority': 1}
++
++
++async def test_episode_metadata_defaults_to_none(mock_service, mock_client):
++    """episode_metadata is None when not provided in an episode dict."""
++    with (
++        patch.object(mod, 'graphiti_service', mock_service),
++        patch.object(mod, 'config', _MOCK_CONFIG, create=True),
++    ):
++        await mod.add_memory_bulk(episodes=[_BASE_EP])
++
++    mock_client.add_episode_bulk.assert_called_once()
++    kwargs = mock_client.add_episode_bulk.call_args.kwargs
++    raw_episodes = kwargs.get('bulk_episodes')
++    assert raw_episodes is not None and len(raw_episodes) == 1
++    assert raw_episodes[0].episode_metadata is None
