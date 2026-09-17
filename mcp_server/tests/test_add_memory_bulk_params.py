@@ -27,6 +27,7 @@ def mock_client():
     client.driver._database = 'test_group'
     client.driver.clone = MagicMock(return_value=client.driver)
     client.clients = MagicMock()
+    client.clients.driver = client.driver
     return client
 
 
@@ -141,7 +142,6 @@ async def test_does_not_mutate_shared_driver(mock_service, mock_client):
     forever. See docs/superpowers/specs/2026-09-17-reindex-after-graph-delete-design.md.
     """
     original_driver = mock_client.driver
-    original_clients = mock_client.clients
 
     with (
         patch.object(mod, 'graphiti_service', mock_service),
@@ -150,7 +150,7 @@ async def test_does_not_mutate_shared_driver(mock_service, mock_client):
         await mod.add_memory_bulk(episodes=[_BASE_EP], group_id='some_other_group')
 
     assert mock_client.driver is original_driver
-    assert mock_client.clients is original_clients
+    assert mock_client.clients.driver is original_driver
     mock_client.driver.clone.assert_not_called()
 
     mock_client.add_episode_bulk.assert_called_once()
