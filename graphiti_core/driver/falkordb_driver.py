@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+import os
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
@@ -73,6 +74,8 @@ from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
+
+VECTOR_EMBEDDING_DIM = int(os.getenv('EMBEDDING_DIM', 1536))
 
 
 def _strip_nul_bytes(value: Any) -> Any:
@@ -327,6 +330,12 @@ class FalkorDriver(GraphDriver):
         index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
         for query in index_queries:
             await self.execute_query(query)
+        vector_index_query = (
+            'CREATE VECTOR INDEX FOR (n:Entity) ON (n.name_embedding) '
+            f"OPTIONS {{dimension: {VECTOR_EMBEDDING_DIM}, similarityFunction: 'cosine'}}"
+        )
+        with suppress(Exception):
+            await self.execute_query(vector_index_query)
 
     def clone(self, database: str) -> 'GraphDriver':
         """

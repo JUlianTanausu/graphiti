@@ -1419,6 +1419,7 @@ class Graphiti:
                         group_id=group_id,
                         created_at=now,
                         valid_at=episode.reference_time,
+                        episode_metadata=episode.episode_metadata,
                     )
                     for episode in bulk_episodes
                 ]

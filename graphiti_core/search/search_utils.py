@@ -737,6 +737,47 @@ async def node_similarity_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        k_candidates = max(limit * 20, 100)
+        post_filter_conditions = list(filter_queries) + ['(1 + score)/2 > $min_score']
+        post_filter_str = ' AND '.join(post_filter_conditions)
+        vector_cypher = (
+            "CALL db.idx.vector.queryNodes('Entity', 'name_embedding', $k_candidates, vecf32($search_vector)) "
+            'YIELD node AS n, score '
+            f'WHERE {post_filter_str} '
+            'RETURN '
+            + get_entity_node_return_query(driver.provider)
+            + ' ORDER BY score DESC LIMIT $limit'
+        )
+        fallback_query = (
+            'MATCH (n:Entity)'
+            + filter_query
+            + '\nWITH n, '
+            + get_vector_cosine_func_query('n.name_embedding', '$search_vector', driver.provider)
+            + ' AS score\nWHERE score > $min_score\nRETURN\n'
+            + get_entity_node_return_query(driver.provider)
+            + '\nORDER BY score DESC\nLIMIT $limit'
+        )
+        try:
+            records, _, _ = await driver.execute_query(
+                vector_cypher,
+                search_vector=search_vector,
+                limit=limit,
+                min_score=min_score,
+                k_candidates=k_candidates,
+                routing_='r',
+                **filter_params,
+            )
+        except Exception as e:
+            logger.warning('HNSW vector search failed, falling back to full scan: %s', e)
+            records, _, _ = await driver.execute_query(
+                fallback_query,
+                search_vector=search_vector,
+                limit=limit,
+                min_score=min_score,
+                routing_='r',
+                **filter_params,
+            )
     else:
         query = (
             """

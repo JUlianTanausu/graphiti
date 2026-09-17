@@ -129,36 +129,54 @@ class FalkorSearchOperations(SearchOperations):
             filter_queries.append('n.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
-        filter_query = ''
-        if filter_queries:
-            filter_query = ' WHERE ' + (' AND '.join(filter_queries))
+        k_candidates = max(limit * 20, 100)
 
-        cypher = (
-            'MATCH (n:Entity)'
-            + filter_query
-            + """
-            WITH n, """
-            + get_vector_cosine_func_query(
-                'n.name_embedding', '$search_vector', GraphProvider.FALKORDB
-            )
-            + """ AS score
-            WHERE score > $min_score
-            RETURN
-            """
+        post_filter_conditions = list(filter_queries) + ['(1 + score)/2 > $min_score']
+        post_filter_str = ' AND '.join(post_filter_conditions)
+
+        vector_cypher = (
+            "CALL db.idx.vector.queryNodes('Entity', 'name_embedding', $k_candidates, vecf32($search_vector)) "
+            'YIELD node AS n, score '
+            f'WHERE {post_filter_str} '
+            'RETURN '
             + get_entity_node_return_query(GraphProvider.FALKORDB)
-            + """
-            ORDER BY score DESC
-            LIMIT $limit
-            """
+            + ' ORDER BY score DESC LIMIT $limit'
         )
 
-        records, _, _ = await executor.execute_query(
-            cypher,
-            search_vector=search_vector,
-            limit=limit,
-            min_score=min_score,
-            **filter_params,
-        )
+        try:
+            records, _, _ = await executor.execute_query(
+                vector_cypher,
+                search_vector=search_vector,
+                limit=limit,
+                min_score=min_score,
+                k_candidates=k_candidates,
+                **filter_params,
+            )
+        except Exception as e:
+            logger.warning('HNSW vector search failed, falling back to full scan: %s', e)
+            # Fallback: índice HNSW no disponible — full-scan O(n)
+            filter_query = ''
+            if filter_queries:
+                filter_query = ' WHERE ' + (' AND '.join(filter_queries))
+
+            fallback_cypher = (
+                'MATCH (n:Entity)'
+                + filter_query
+                + '\nWITH n, '
+                + get_vector_cosine_func_query(
+                    'n.name_embedding', '$search_vector', GraphProvider.FALKORDB
+                )
+                + ' AS score\nWHERE score > $min_score\nRETURN\n'
+                + get_entity_node_return_query(GraphProvider.FALKORDB)
+                + '\nORDER BY score DESC\nLIMIT $limit'
+            )
+            records, _, _ = await executor.execute_query(
+                fallback_cypher,
+                search_vector=search_vector,
+                limit=limit,
+                min_score=min_score,
+                **filter_params,
+            )
 
         return [entity_node_from_record(r) for r in records]
 

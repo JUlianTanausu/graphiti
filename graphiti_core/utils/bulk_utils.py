@@ -105,6 +105,7 @@ class RawEpisode(BaseModel):
     source_description: str
     source: EpisodeType
     reference_time: datetime
+    episode_metadata: dict | None = Field(default=None)
 
 
 async def retrieve_previous_episodes_bulk(
