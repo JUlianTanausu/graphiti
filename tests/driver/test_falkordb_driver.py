@@ -236,6 +236,27 @@ class TestFalkorDriver:
 
             mock_execute.assert_called_once_with('CALL db.indexes()')
 
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_build_indices_and_constraints_logs_vector_index_failure(self):
+        """A genuine failure creating the HNSW vector index is logged as a
+        warning, not silently swallowed — see
+        docs/superpowers/specs/2026-09-17-reindex-after-graph-delete-design.md.
+        """
+
+        async def fake_execute_query(query, **kwargs):
+            if 'VECTOR INDEX' in query:
+                raise Exception('dimension mismatch')
+            return None
+
+        self.driver.execute_query = AsyncMock(side_effect=fake_execute_query)
+
+        with patch('graphiti_core.driver.falkordb_driver.logger') as mock_logger:
+            await self.driver.build_indices_and_constraints()
+
+        mock_logger.warning.assert_called_once()
+        assert 'dimension mismatch' in str(mock_logger.warning.call_args)
+
 
 class TestFalkorDriverSession:
     """Test FalkorDB driver session functionality."""

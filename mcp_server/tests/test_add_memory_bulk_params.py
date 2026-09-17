@@ -25,8 +25,9 @@ def mock_client():
     client.add_episode_bulk = AsyncMock(return_value=result)
     client.driver = MagicMock()
     client.driver._database = 'test_group'
-    client.driver.clone = MagicMock(return_value=client.driver)
+    client.driver.clone = MagicMock(return_value=MagicMock(name='cloned_driver'))
     client.clients = MagicMock()
+    client.clients.driver = client.driver
     return client
 
 
@@ -129,3 +130,29 @@ async def test_episode_metadata_defaults_to_none(mock_service, mock_client):
     raw_episodes = kwargs.get('bulk_episodes')
     assert raw_episodes is not None and len(raw_episodes) == 1
     assert raw_episodes[0].episode_metadata is None
+
+
+async def test_does_not_mutate_shared_driver(mock_service, mock_client):
+    """add_memory_bulk must not reassign client.driver / client.clients.driver.
+
+    add_episode_bulk already resolves a request-scoped driver internally via
+    Graphiti._resolve_request_scope — reassigning client.driver here duplicated
+    (and undermined) that safe mechanism, and is what let a group's driver stay
+    permanently pinned to a deleted graph, silently skipping index (re)creation
+    forever. See docs/superpowers/specs/2026-09-17-reindex-after-graph-delete-design.md.
+    """
+    original_driver = mock_client.driver
+
+    with (
+        patch.object(mod, 'graphiti_service', mock_service),
+        patch.object(mod, 'config', _MOCK_CONFIG, create=True),
+    ):
+        await mod.add_memory_bulk(episodes=[_BASE_EP], group_id='some_other_group')
+
+    assert mock_client.driver is original_driver
+    assert mock_client.clients.driver is original_driver
+    mock_client.driver.clone.assert_not_called()
+
+    mock_client.add_episode_bulk.assert_called_once()
+    kwargs = mock_client.add_episode_bulk.call_args.kwargs
+    assert kwargs.get('group_id') == 'some_other_group'

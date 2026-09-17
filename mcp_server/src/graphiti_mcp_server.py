@@ -645,10 +645,6 @@ async def add_memory_bulk(
         effective_group_id = normalize_group_id(group_id or config.graphiti.group_id)
         client = await graphiti_service.get_client()
 
-        if effective_group_id != client.driver._database:
-            client.driver = client.driver.clone(database=effective_group_id)
-            client.clients.driver = client.driver
-
         raw_episodes = []
         for ep in episodes:
             try:
