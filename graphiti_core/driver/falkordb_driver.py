@@ -334,8 +334,10 @@ class FalkorDriver(GraphDriver):
             'CREATE VECTOR INDEX FOR (n:Entity) ON (n.name_embedding) '
             f"OPTIONS {{dimension: {VECTOR_EMBEDDING_DIM}, similarityFunction: 'cosine'}}"
         )
-        with suppress(Exception):
+        try:
             await self.execute_query(vector_index_query)
+        except Exception as e:
+            logger.warning(f'Failed to create HNSW vector index: {e}')
 
     def clone(self, database: str) -> 'GraphDriver':
         """
