@@ -205,8 +205,110 @@ def test_cli_override():
     print('✓ Defaults preserved when CLI flags are omitted')
 
 
+def test_shared_config_source_merges_with_local(tmp_path, monkeypatch):
+    """Local and shared YAML sources combine into one config — the shared
+    file's entity_types survive alongside the local file's own settings,
+    instead of one source replacing the other's `graphiti` block wholesale.
+    """
+    local_yaml = tmp_path / 'config-local.yaml'
+    local_yaml.write_text('server:\n  port: 9999\n')
+    shared_yaml = tmp_path / 'config.yaml'
+    shared_yaml.write_text(
+        'graphiti:\n'
+        '  entity_types:\n'
+        '    - name: "Person"\n'
+        '      description: "A human."\n'
+    )
+    monkeypatch.setenv('CONFIG_PATH', str(local_yaml))
+
+    config = GraphitiConfig()
+
+    assert config.server.port == 9999
+    assert len(config.graphiti.entity_types) == 1
+    assert config.graphiti.entity_types[0].name == 'Person'
+
+
+def test_local_entity_types_win_over_shared(tmp_path, monkeypatch):
+    """When both the local and shared files define entity_types, the local
+    (higher-priority) one wins entirely — proves the priority order is not
+    accidentally reversed. This test already passes before Task 1's Step 3
+    change too (today's code only ever reads the local file), but it must
+    keep passing afterward — it is the regression test for priority order,
+    not a RED test for this change.
+    """
+    local_yaml = tmp_path / 'config-local.yaml'
+    local_yaml.write_text(
+        'graphiti:\n'
+        '  entity_types:\n'
+        '    - name: "LocalOnly"\n'
+        '      description: "From the local file."\n'
+    )
+    shared_yaml = tmp_path / 'config.yaml'
+    shared_yaml.write_text(
+        'graphiti:\n'
+        '  entity_types:\n'
+        '    - name: "SharedOnly"\n'
+        '      description: "From the shared file."\n'
+    )
+    monkeypatch.setenv('CONFIG_PATH', str(local_yaml))
+
+    config = GraphitiConfig()
+
+    assert len(config.graphiti.entity_types) == 1
+    assert config.graphiti.entity_types[0].name == 'LocalOnly'
+
+
+def test_missing_shared_config_degrades_safely(tmp_path, monkeypatch):
+    """No config.yaml sibling present: construction still succeeds and
+    entity_types falls back to the model's own default (empty list) instead
+    of raising. Also already passes before Task 1's Step 3 change (today
+    there is no second source to go missing), but must keep passing after —
+    it is the regression test for the "missing shared file" row of the
+    spec's Error Handling table, not a RED test for this change.
+    """
+    local_yaml = tmp_path / 'config-local.yaml'
+    local_yaml.write_text('server:\n  port: 8888\n')
+    monkeypatch.setenv('CONFIG_PATH', str(local_yaml))
+    # Deliberately no tmp_path / 'config.yaml' — the shared file is absent.
+
+    config = GraphitiConfig()
+
+    assert config.server.port == 8888
+    assert config.graphiti.entity_types == []
+
+
+def test_config_path_pointing_at_shared_file_reads_it_twice_harmlessly(tmp_path, monkeypatch):
+    """When CONFIG_PATH already IS config.yaml (no separate local file), the
+    shared source reads the same file a second time — same result, no error.
+    """
+    shared_yaml = tmp_path / 'config.yaml'
+    shared_yaml.write_text(
+        'server:\n  port: 7777\n'
+        'graphiti:\n'
+        '  entity_types:\n'
+        '    - name: "Solo"\n'
+        '      description: "Only file."\n'
+    )
+    monkeypatch.setenv('CONFIG_PATH', str(shared_yaml))
+
+    config = GraphitiConfig()
+
+    assert config.server.port == 7777
+    assert len(config.graphiti.entity_types) == 1
+    assert config.graphiti.entity_types[0].name == 'Solo'
+
+
 async def main():
-    """Run all tests."""
+    """Run all tests.
+
+    Note: the fixture-based tests added alongside the shared-config-source
+    change (test_shared_config_source_merges_with_local,
+    test_local_entity_types_win_over_shared,
+    test_missing_shared_config_degrades_safely,
+    test_config_path_pointing_at_shared_file_reads_it_twice_harmlessly) use
+    the `tmp_path`/`monkeypatch` pytest fixtures and are not callable
+    standalone, so they are not invoked here. Run `pytest` to exercise them.
+    """
     print('=' * 60)
     print('Configuration and Factory Pattern Test Suite')
     print('=' * 60)

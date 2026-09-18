@@ -311,9 +311,19 @@ class GraphitiConfig(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Customize settings sources to include YAML."""
         config_path = Path(os.environ.get('CONFIG_PATH', 'config/config.yaml'))
-        yaml_settings = YamlSettingsSource(settings_cls, config_path)
-        # Priority: CLI args (init) > env vars > yaml > defaults
-        return (init_settings, env_settings, yaml_settings, dotenv_settings)
+        local_settings = YamlSettingsSource(settings_cls, config_path)
+        # Shared, git-tracked config living alongside whichever file CONFIG_PATH
+        # points at — e.g. config-local.yaml's sibling config.yaml. Lower priority
+        # than local_settings, so a machine-specific override (should one ever be
+        # needed) still wins; contributes nothing if it doesn't exist
+        # (YamlSettingsSource already returns {} for a missing file) or if
+        # config_path already IS config.yaml (reads the same file twice, harmless).
+        # Note: list-valued fields like `entity_types` are replaced wholesale by
+        # whichever source wins (local, if it defines the key at all) — never merged
+        # element-by-element with the other source's list.
+        shared_settings = YamlSettingsSource(settings_cls, config_path.parent / 'config.yaml')
+        # Priority: CLI args (init) > env vars > local yaml > shared yaml > defaults
+        return (init_settings, env_settings, local_settings, shared_settings, dotenv_settings)
 
     def apply_cli_overrides(self, args) -> None:
         """Apply CLI argument overrides to configuration."""
