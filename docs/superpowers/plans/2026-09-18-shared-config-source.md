@@ -204,10 +204,10 @@ Expected: `13` (the current count of entity types in the git-tracked shared file
 `entity_types:` is the last key in the file today (nothing follows its list), so deleting from that line to end-of-file removes exactly the block and nothing else:
 
 ```bash
-sed -i '' '/^\s*entity_types:/,$d' /Users/jtvv/Documents/AIMC/Fail-AIMC-Graphiti/config/config-local.yaml
+sed -i '' '/^[[:space:]]*entity_types:/,$d' /Users/jtvv/Documents/AIMC/Fail-AIMC-Graphiti/config/config-local.yaml
 ```
 
-(macOS `sed` needs the empty `-i ''` — omitting it, or using bare `-i`, is the GNU-sed syntax and will error on macOS.)
+(macOS `sed` needs the empty `-i ''` — omitting it, or using bare `-i`, is the GNU-sed syntax and will error on macOS. Also use `[[:space:]]`, not `\s` — BSD/macOS `sed` doesn't support `\s` as whitespace; a `\s` pattern silently matches nothing instead of erroring, so the command exits 0 having deleted nothing. Confirmed by hitting exactly this on the real file during execution: `\s*entity_types:` left the file untouched with no error, `[[:space:]]*entity_types:` correctly deleted the block.)
 
 Verify: `tail -5 /Users/jtvv/Documents/AIMC/Fail-AIMC-Graphiti/config/config-local.yaml` should now end with the `graphiti: group_id:` line (or whatever key preceded `entity_types:`), not an entity list. Every other key (`server`, `llm`, `embedder`, `database`) is untouched — the command only ever deletes from `entity_types:` onward.
 
