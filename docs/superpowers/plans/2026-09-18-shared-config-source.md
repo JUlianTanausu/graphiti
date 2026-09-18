@@ -213,7 +213,7 @@ Verify: `tail -5 /Users/jtvv/Documents/AIMC/Fail-AIMC-Graphiti/config/config-loc
 
 - [ ] **Step 3: Verify the resolved `entity_types` directly, without starting the full server**
 
-`GraphitiConfig()` instantiation is a pure config-parsing step — no network calls, no FalkorDB or LLM credentials needed — so it can be checked in isolation, faster and with a clearer failure signal than starting the whole server and hunting for a log line (nothing today logs the resolved entity types at startup):
+`GraphitiConfig()` instantiation is a pure config-parsing step — no network calls, no FalkorDB or LLM credentials needed — so it can be checked in isolation, faster and with a clearer failure signal than starting the whole server and hunting for a log line (the server does log the resolved entity type names at startup — graphiti_mcp_server.py:367-371 — but under systemd this log line often never reaches journalctl due to Python's stdout being block-buffered on a non-tty; this direct check is more reliable than trying to observe that log line):
 
 ```bash
 cd /Users/jtvv/Documents/AIMC/Fail-AIMC-Graphiti/vendor/graphiti/mcp_server

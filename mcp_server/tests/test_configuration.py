@@ -277,8 +277,38 @@ def test_missing_shared_config_degrades_safely(tmp_path, monkeypatch):
     assert config.graphiti.entity_types == []
 
 
+def test_config_path_pointing_at_shared_file_reads_it_twice_harmlessly(tmp_path, monkeypatch):
+    """When CONFIG_PATH already IS config.yaml (no separate local file), the
+    shared source reads the same file a second time — same result, no error.
+    """
+    shared_yaml = tmp_path / 'config.yaml'
+    shared_yaml.write_text(
+        'server:\n  port: 7777\n'
+        'graphiti:\n'
+        '  entity_types:\n'
+        '    - name: "Solo"\n'
+        '      description: "Only file."\n'
+    )
+    monkeypatch.setenv('CONFIG_PATH', str(shared_yaml))
+
+    config = GraphitiConfig()
+
+    assert config.server.port == 7777
+    assert len(config.graphiti.entity_types) == 1
+    assert config.graphiti.entity_types[0].name == 'Solo'
+
+
 async def main():
-    """Run all tests."""
+    """Run all tests.
+
+    Note: the fixture-based tests added alongside the shared-config-source
+    change (test_shared_config_source_merges_with_local,
+    test_local_entity_types_win_over_shared,
+    test_missing_shared_config_degrades_safely,
+    test_config_path_pointing_at_shared_file_reads_it_twice_harmlessly) use
+    the `tmp_path`/`monkeypatch` pytest fixtures and are not callable
+    standalone, so they are not invoked here. Run `pytest` to exercise them.
+    """
     print('=' * 60)
     print('Configuration and Factory Pattern Test Suite')
     print('=' * 60)

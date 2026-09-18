@@ -137,10 +137,20 @@ per-machine: `server.port`, `database.providers.falkordb` host/port, the `small_
 ### D.3 — Nothing else changes
 
 `config/config.yaml` already has the correct 13 entity types (confirmed current as of today's
-Location/Service fix) — it is not modified by this branch. No other config section
-(`server`/`llm`/`embedder`/`database`) is touched; this design is scoped to `graphiti.entity_types`
-only, per D.2. Extending the shared source to cover other fields is a future decision, not part of
-this change.
+Location/Service fix) — it is not modified by this branch. D.2 only removes `entity_types` from the
+local files — no other key is intentionally changed. But the mechanism in D.1 is generic: any key
+the local file omits now falls through to the shared `config.yaml` for ALL config sections, not only
+`graphiti.entity_types`. On the real configs this is not hypothetical: `config-local.yaml` defines
+`database.providers.falkordb` as `{host, port}` while `config.yaml` defines it as
+`{uri, password, database}` — after this change, the merged config also gains `uri` from the shared
+file. When `FALKORDB_URI` is set (true on both the Mac's `.env` and the systemd unit's `--env-file`),
+the resolved FalkorDB endpoint is unchanged, because `factories.py` reads the env var first either
+way. When `FALKORDB_URI` is unset, `${FALKORDB_URI}` expands to `None` and `GraphitiConfig()` now
+raises a validation error where it previously constructed fine with a local default — a new hard
+dependency for anyone running `--config config-local.yaml` without sourcing `.env`. Extending the
+shared source's *scope on purpose* to cover other config sections deliberately is still a future
+decision, not part of this change — but the mechanism's actual behavior is already broader than
+`entity_types` alone.
 
 ---
 
@@ -152,6 +162,7 @@ this change.
 | `config_path` already points directly at `config.yaml` (no separate local file) | `shared_settings` reads the same file a second time; identical result, no conflict. |
 | Someone leaves `entity_types` in a machine's `config-local.yaml` by mistake (e.g. this migration's step D.2 is skipped for one machine) | Local wins over shared per the priority order (D.1) — that machine silently keeps using its own (possibly stale) list instead of the shared one. This is the one way the fix can be silently defeated; the manual verification in D.4 explicitly checks for this by diffing the resolved `entity_types` count/content against `config.yaml`, not just checking that the server starts. |
 | Shared `config.yaml` has a YAML syntax error | Same as today's single-source failure mode — `yaml.safe_load` raises, `GraphitiConfig()` construction fails, server does not start. Not a new risk introduced by this change; unchanged from the current single-file behavior. |
+| `FALKORDB_URI` unset and no `.env` sourced, running with `--config config-local.yaml` directly (not via the systemd unit, which always supplies it via `--env-file`) | `GraphitiConfig()` now raises a validation error (`database.providers.falkordb.uri — Input should be a valid string`) where it previously constructed successfully with a local default. This is a side effect of D.1's generic merge mechanism inheriting `database.providers.falkordb.uri` from the shared `config.yaml` alongside `entity_types` — not a deliberate scope decision. Fails loudly at construction time, so it is not a silent-failure risk, but it is a new hard dependency worth knowing about. |
 
 ---
 
@@ -198,7 +209,9 @@ Only after this passes on the Mac: apply D.2's `config-local.yaml` edit on pione
 - Branch: `feat/shared-config-source` only. No commits to `main` without explicit approval.
 - No new dependencies — `pydantic-settings`'s existing multi-source mechanism is sufficient.
 - Scope is `graphiti.entity_types` only (D.3) — do not extend the shared source to other config
-  sections as part of this branch.
+  sections as part of this branch. (the underlying mechanism is generic and already affects any
+  field the local file omits — see D.3 — this constraint is about not deliberately adding more
+  content to the shared file, not a guarantee about the merge's technical reach).
 - Do not remove or restructure `YamlSettingsSource` itself — reuse it as-is for the second source.
 - `config/config.yaml`'s content is not modified by this branch.
 - Mac must be verified (D.4) before pioneer10 is touched — no skipping straight to production.

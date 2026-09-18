@@ -318,6 +318,9 @@ class GraphitiConfig(BaseSettings):
         # needed) still wins; contributes nothing if it doesn't exist
         # (YamlSettingsSource already returns {} for a missing file) or if
         # config_path already IS config.yaml (reads the same file twice, harmless).
+        # Note: list-valued fields like `entity_types` are replaced wholesale by
+        # whichever source wins (local, if it defines the key at all) — never merged
+        # element-by-element with the other source's list.
         shared_settings = YamlSettingsSource(settings_cls, config_path.parent / 'config.yaml')
         # Priority: CLI args (init) > env vars > local yaml > shared yaml > defaults
         return (init_settings, env_settings, local_settings, shared_settings, dotenv_settings)
