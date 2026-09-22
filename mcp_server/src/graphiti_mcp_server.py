@@ -209,12 +209,18 @@ mcp = FastMCP(
             "127.0.0.1:*",
             "10.95.150.131:*",
             "pioneer10.hi.inet:*",
+            # Container name on the dedicated Podman network used by the
+            # pre/pro deployment scripts (Fail-AIMC-Web-Memory, Fail-AIMC-Graphiti):
+            # the backend reaches Graphiti as http://fail-aimc-graphiti:<port>/mcp/,
+            # so that Host must be allowed or DNS-rebinding protection rejects it.
+            "fail-aimc-graphiti:*",
         ],
         allowed_origins=[
             "http://localhost:*",
             "http://127.0.0.1:*",
             "http://10.95.150.131:*",
             "http://pioneer10.hi.inet:*",
+            "http://fail-aimc-graphiti:*",
         ],
     ),
 )
