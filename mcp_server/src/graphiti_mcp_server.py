@@ -209,6 +209,7 @@ mcp = FastMCP(
             "127.0.0.1:*",
             "10.95.150.131:*",
             "pioneer10.hi.inet:*",
+            "fail-aimc-graphiti:*",
         ],
         allowed_origins=[
             "http://localhost:*",
